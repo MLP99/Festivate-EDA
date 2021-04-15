@@ -12,3 +12,5 @@ https://mlp99.github.io/Festivate-EDA/
 
 ## Goal:
 The goal of this school project was to create a fact sheet that contains essential information that was discovered during multiple data analysis each group member did.
+
+![](./images/Factsheet_festivate.png)
