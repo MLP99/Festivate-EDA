@@ -1,0 +1,402 @@
+---
+title: "Project: Festivate (EDA)"
+output: html_notebook
+---
+
+## About this project
+One important note: this project was originally made in Dutch. I translated every description and comments in the code. Only table names are in Dutch.
+
+This project is all about process improvement when organizing festivals. I designed the SQL database for this project for the festival organizers and used R to manipulate and visualize data.
+
+### Workflow:
+
+### 1. Data collection
+### 2. Pre-processing
+### 3. Exploratory Data Analysis
+
+### 1.1 Importing libraries:
+```{r echo=TRUE}
+library(dplyr) # Data manipulation
+library(ggplot2) # Data visualization
+library(RSQLite) # Database connection
+library(forcats) # Factors
+library(lubridate) # Dates
+library(openxlsx) # Export to Excel
+library(rio) # Export to Excel
+library(ggrepel) # Pie chart
+```
+
+### 1.2 Database connection 
+```{r echo=TRUE}
+con <- dbConnect(SQLite(), "/Users/milanpatty/Documents/Business/Semester_2/R/Proftaak/Festivate2.db")
+```
+
+### 1.3 Check whether the tables have been loaded successfully
+```{r}
+as.data.frame(dbListTables(con))
+```
+
+### 1.4 Create objects from the tables
+```{r echo=TRUE}
+aanmeldingen <- dbReadTable(con, 'aanmeldingen')
+beschikbare_middelen <- dbReadTable(con, 'beschikbare_middelen')
+bezoeker <- dbReadTable(con, 'bezoeker')
+campagne <- dbReadTable(con, 'festival')
+campagne_festival <- dbReadTable(con, 'campagne_festival')
+festival <- dbReadTable(con, 'festival')
+festival_categorie <- dbReadTable(con, 'festival_categorie')
+festival_categorie_festival <- dbReadTable(con, 'festival_categorie_festival')
+festival_partners <- dbReadTable(con, 'festival_partners')
+inkoop <- dbReadTable(con, 'inkoop')
+
+inkoop_festival <- dbReadTable(con, 'inkoop_festival')
+locatie <- dbReadTable(con, 'locatie')
+partners <- dbReadTable(con, 'partners')
+sponsoren <- dbReadTable(con, 'sponsoren')
+ticket_categorie <- dbReadTable(con, 'ticket_categorie')
+tickets <- dbReadTable(con, 'tickets')
+verkoop_producten <- dbReadTable(con, 'verkoop_producten')
+locatie_festival <- dbReadTable(con, 'locatie_festival')
+verkoop_producten_festival <- dbReadTable(con, 'verkoop_producten_festival')
+werknemers <- dbReadTable(con, 'werknemers')
+
+werknemers_werkzaamheden <- dbReadTable(con, 'werknemers_werkzaamheden')
+werkzaamheden <- dbReadTable(con, 'werkzaamheden')
+werkzaamheden_festival <- dbReadTable(con, 'werkzaamheden_festival')
+```
+
+## 2. Pre-processing
+The second step after data collection is the pre-processing of data. This includes various things such as class labeling (indicating the correct data type), data cleaning (correcting, for example, incorrectly spelled names) and the handling of missing values. Furthermore, the data I use from my database is tidy according to the 3 rules:
+
+1. Each variable has its own column.
+2. Each observation has its own row.
+3. Each value has its own cell.
+
+### 2.1 Table Location
+While setting up the database, a group member responsible for the table miswritten the word 'capaciteit'(capicity) Of course, we want to fix this bug and make sure it gets correct everywhere. Since bezoekers_capiciteit (visitor_capacity) is a column, it can easily be renamed with the function `rename`.
+```{r}
+locatie <-locatie %>%
+  rename(bezoekers_capaciteit = bezoekers_capiciteit)
+```
+To see if the change is correct:
+```{r}
+colnames(locatie)
+```
+
+## 3. EDA
+
+### 3.1 What is the visitor capacity per location?
+The figure below shows all locations with the corresponding visitor capacity. These are a total of 15 locations, each of which has its own areas. What is striking is that the top 3 locations with the most capacity take up 59.01% of the total capacity and the 5 locations with the least capacity only take up 6.83%. By chance, it does not mean that locations with more areas can have more visitors. The location with the most areas is the Berendonck in Wijchen, where the annual Emporium festival is held. These locations have no fewer than 17 areas and themselves only take up 6.21% of the total capacity. This substantiation has been validated with calculation functions in Excel and is also stored there.
+```{r}
+locatie %>%
+  mutate(naam = fct_reorder(naam, bezoekers_capaciteit)) %>% # Mutate for the new column with the correct factor order
+  ggplot( aes(x=naam, y=bezoekers_capaciteit)) + # First 2 layers of a plot: Data + Aesthetics
+    geom_bar(stat="identity", fill="#f68060", alpha=.7, width=.6) + # 3rd layer of the plot, stat='identity' because I have values for x&y
+    coord_flip() + # Switching axis
+    xlab('Location') +
+    ylab('Visitor capacity')+
+    ggtitle('Visitor capacity per location')+
+    theme_bw(base_size = 15)
+```
+
+### 3.2 What is the sales per month?
+Below you can see the sales per month divided over 2018, 2019 and 2021. What can be seen in this figure is that there are years where some months have no sales. For 2018 this will be April and for 2019 and 2021 it will both be March. in 2018 total sales were € 491,043.00 compared to 2019 and 2021, where it was both € 113,104.00. Average sales in 2018 were € 61,381.25, in 2019 and 2021 it was both € 14,138.88. These calculations have been validated with Excel's calculation functions.
+
+```{sql connection=con, output.var='afzet'}
+SELECT product, ROUND(prijs,2) AS prijs, aantal, leverancier, datum /* Round off to 2 decimal places at Round because it is a price */
+FROM inkoop i
+JOIN inkoop_festival ink
+ON ink.inkoop_id = i.inkoop_id
+JOIN festival f
+ON ink.festival_id = f.festival_id
+```
+
+```{r}
+afzet$aantal[31] <- 300 # Change quantity because this error is in the database
+```
+
+```{r fig.width=12}
+afzet %>%
+  mutate(jaar = year(datum), maand= month(datum), afzet_prijs = aantal * prijs) %>% # Create new columns for the year, month and sales
+  group_by(jaar, maand) %>% # Group by year and month
+  summarise(afzet = sum(afzet_prijs)) %>% # Minimizing all rows by means of an accumulated sales per year and month
+
+ggplot(aes(maand, afzet, fill=factor(maand))) + geom_bar(stat = 'identity') + facet_grid(~ jaar) + #As color I use the factor levels of month, stat = 'identity' because I use values for x & y, then facet_grid to distribute the visualizations over the years.
+  scale_y_continuous(breaks=seq(0,200000,10000)) + # y axis reset
+  scale_x_continuous(breaks=seq(3,9,1)) + # reset axis
+  ggtitle('Sales per month divided over 2018, 2019 & 2021') +
+  xlab('Month') +
+  ylab('Sales in €') +
+  theme_bw(base_size = 16) +
+  theme(legend.position = "none")
+```
+
+```{r}
+afzet_output <- afzet %>% # create an object from this data to later validate it in excel
+  mutate(jaar = year(datum), maand= month(datum), afzet_prijs = aantal * prijs)
+```
+
+```{r}
+export(afzet_output, 'afzet.xlsx') # Export
+```
+
+### 3.3 Which Festivals have a sponsor who sponsors an item with a value above € 5500?
+The figure below shows which festivals were sponsored an item with a value above € 5500. What is obvious is that the 2 festivals that have the highest value have both been given a budget that together is 49.8% of the total sponsored values above € 5500. The 5 festivals with the lowest sponsored values account for only 15.34% of the total sponsored amount. These calculations have been validated with excel.
+```{sql connection=con, output.var='sponsor_lijstje'}
+/* Use SQL query and save this output to use in R. Inline view as result set and add a new column for year. Then filter for values above 5,500 euros and values that are not null. */
+SELECT festival_naam, sponsor_naam, item, waarde, jaar
+FROM  
+(
+    SELECT f.naam AS festival_naam, item, s.naam AS sponsor_naam, waarde, strftime('%Y',datum) as "jaar"
+    FROM festival f
+    JOIN beschikbare_middelen bm
+    ON bm.festival_id = f.festival_id
+    JOIN sponsoren s
+    ON s.sponsor_id = bm.sponsor_id
+)t
+WHERE waarde > 5500 AND waarde IS NOT NULL
+AND jaar = '2019'
+ORDER BY waarde
+```
+
+```{r fig.width=15}
+options(scipen=999) # Remove math notation
+sponsor_lijstje<- data.frame(sponsor_lijstje)[1:10,] # Validate my SQL chunk. The output indicated 10 items above 5000 euro and 3 null values, with this I select only those 10 items that have a value and those 3 others are dropped.
+  sponsor_lijstje %>%
+  mutate(festival_naam = fct_reorder(festival_naam, waarde)) %>% # use of forcats to rearrange the factor levels based on the values they have so that they go from high to low
+  ggplot(aes(festival_naam, waarde, fill=item)) +  # as color I want to show the item being sponsored
+  geom_bar(stat='identity', width = .6) + # for the 2 values
+  coord_flip() + # Switching the x & y axis
+  ggtitle('Festivals in 2019 that were sponsored 1 item with a value above € 5500') +
+  xlab('Festival name') +
+  ylab('Value item in €') +
+  theme_bw(base_size = 16) +
+  guides(fill=guide_legend(title="Name Item")) +
+  scale_y_continuous(breaks=seq(0,150000,20000)) # rearrange y axis
+```
+```{r}
+export(sponsor_lijstje, 'sponsors.xlsx') # export for validation
+```
+
+
+### 3.4 Which Festivals have more than 3 partners?
+For this query I am using a CTE as result set. I hereby show which festivals have more than 3 partners. In the CTE I select the festivals and count the number of partners they have. I hereby join on 2 tables: partners and the intermediate table festival_partners. Then I group by festival name. In the query I select all festivals that have more than 3 partners. I validated this by looking in the database which festivals have which partners.
+```{sql connection=con}
+WITH festival_partners_cte
+AS
+(
+SELECT f.naam AS festival_naam, COUNT(p.naam) AS aantal_partners /* Partners count per festival */
+FROM festival f
+JOIN festival_partners fp
+ON fp.festival_id = f.festival_id
+JOIN partners p 
+ON p.partner_id = fp.partner_id
+GROUP BY f.naam
+)
+
+SELECT festival_naam, aantal_partners
+FROM festival_partners_cte
+WHERE aantal_partners > 3 /* Select festivals that have more than 3 partners. */
+
+```
+
+
+### 3.5 Which purchasing supplier supplies the most products?
+In this query I show which supplier delivers the most products in numbers and what percentage this is of the total deliveries. First of all, I add up the products by grouping by the supplier name, then I count all products and divide them by all the products that are in the purchase table. I round this to 2 decimal places. Below you can see that the Makro supplies no less than 33.33% of all products and the numbers 2 and 3 are also good for 33.33% in total. This means that only the top 3 suppliers already supply 66.66% of all products. These calculations have been validated in excel.
+```{sql connection=con}
+SELECT leverancier,COUNT(product) AS aantal, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM inkoop),2) AS percentage /* calculate percentage */
+FROM inkoop
+GROUP BY leverancier
+ORDER BY percentage DESC
+```
+
+### 3.6 Sex ratio visitors
+Below you can see the gender ratio of the festival visitors. 52% of the festival visitors are male while 48% of the visitors are female(vrouw). For this chunk I did the following: from the visitor table I started grouping by gender. Then I started to minimize all rows by using summarise and counting the rows for each gender. Then I started plotting everything. I want to put the percentages on the Y axis and I want to use the levels of the factor as color. This chunk has been validated using an SQL query that gives the same result.
+```{r}
+bezoeker %>%
+  group_by(geslacht) %>% # group by
+  summarise(aantal = n()) %>% # count
+  mutate(procent = round(100 * aantal / sum(aantal), 1)) %>% # create new column
+ggplot(aes(x = '', y = aantal ,fill = factor(geslacht))) + # plotting
+  geom_bar(width = 1, stat='identity') + # stat = 'identity' because x and y are used
+  coord_polar(theta = "y") + 
+  theme_void() + # remove background lines
+  ggtitle('Ratio of sex of visitors') +
+  guides(fill=guide_legend(title="Sex")) + 
+  scale_fill_manual(values=c("#00ccff", "#ff0000")) + # colors
+  geom_label_repel(aes(label = procent), size = 5, show.legend = F) 
+```
+
+The validation:
+```{sql connection=con}
+select geslacht,  ROUND(COUNT(*) *100 / (select count(*) FROM bezoeker),2) AS percentage
+FROm bezoeker
+group by geslacht
+```
+
+### 3.7 Which visitors went to Mysteryland in 2018 and have also been to Mysteryland in subsequent years?
+Below you can see which festival visitors have been to Mysteryland in 2018 and then returned in consecutive years. The first query consists of an inline view and 2 subqueries, the last validation query consists of a CTE and a query. Here I use a CASE statement as an Inline IF to select values that meet a certain condition.
+```{sql connection=con}
+SELECT voornaam, achternaam, bezoeker_id
+FROM
+(
+  SELECT  f.naam AS festival_naam, b.voornaam AS voornaam, b.achternaam AS achternaam, b.bezoeker_id, strftime('%Y',datum) as "jaar"
+  FROM festival f
+   JOIN aanmeldingen a
+  ON a.festival_id = f.festival_id
+   JOIN bezoeker b
+  ON b.bezoeker_id = a.bezoeker_id
+)t
+WHERE jaar = '2018' AND festival_naam = 'Mysteryland'
+AND bezoeker_id in /* Subquery */
+(
+	SELECT bezoeker_id
+	FROM
+(
+  /* Inline view */
+	SELECT  f.naam AS festival_naam, b.voornaam AS voornaam, b.achternaam AS achternaam, b.bezoeker_id, strftime('%Y',datum) as "jaar"
+	FROM festival f
+	 JOIN aanmeldingen a
+	ON a.festival_id = f.festival_id
+	 JOIN bezoeker b
+	ON b.bezoeker_id = a.bezoeker_id
+)t
+WHERE jaar = '2019' AND festival_naam = 'Mysteryland'
+)
+AND bezoeker_id IN /* Subquery */
+(
+SELECT bezoeker_id
+FROM
+(
+  /* Inline view */
+  SELECT  f.naam AS festival_naam, b.voornaam AS voornaam, b.achternaam AS achternaam, b.bezoeker_id, strftime('%Y',datum) as "jaar"
+  FROM festival f
+   JOIN aanmeldingen a
+  ON a.festival_id = f.festival_id
+   JOIN bezoeker b
+  ON b.bezoeker_id = a.bezoeker_id
+)t
+WHERE jaar = '2021' AND festival_naam = 'Mysteryland'
+)
+```
+
+```{sql connection=con}
+WITH result_set AS /* CTE as result set */
+(
+	SELECT DISTINCT f.naam AS festival_naam, b.voornaam AS voornaam, b.achternaam AS achternaam, b.bezoeker_id, strftime('%Y',datum) as "jaar"
+	  FROM festival f
+	   JOIN aanmeldingen a
+	  ON a.festival_id = f.festival_id
+	   JOIN bezoeker b
+	  ON b.bezoeker_id = a.bezoeker_id
+  )
+  
+  SELECT DISTINCT bezoeker_id, voornaam, achternaam, 
+  CASE 
+	WHEN festival_naam ='Mysteryland' AND jaar = '2018' THEN 'Ja'  /* Case as a replacement for Inline IF */
+	WHEN jaar = '2019' AND jaar = '2021' THEN 'Ja' /* Consists of 3 mandatory parts: CASE, WHEN & END, ELSE is optional */
+	ELSE 'Nee' END AS geweest
+  from result_set
+  ORDER BY geweest
+```
+
+### 3.8 What is the age distribution of the festival visitors?
+The figure below shows the age distribution of the festival visitors by gender. What is obvious is that fewer 40+ men go to festivals compared to 40+ women. Up to the age of 32, more men than women attend festivals, while many young women (18 to 20) attend festivals. The average age of the festival visitors is 27 years and the median is 23. The oldest visitor is 52 for men and 54 for women. The youngest visitors of both men and women are both 18 years old.
+Man = Male, vrouw = Female
+```{r fig.width=12}
+bezoeker$leeftijd <- as.numeric(difftime(Sys.Date(),bezoeker$geboorte_datum, units = "weeks"))/52.25 # age formula
+bezoeker$leeftijd <- floor(bezoeker$leeftijd) # to round down
+
+ggplot(bezoeker, aes(x=leeftijd, fill=geslacht)) + # plotting
+  geom_histogram(position="identity",binwidth=2, alpha=0.6) + 
+  scale_x_continuous(breaks=seq(18,60,2)) + # rearrange the axes
+  scale_y_continuous(breaks=seq(0,15,1)) + # rearrange the axes
+  geom_vline(aes(xintercept=mean(leeftijd)), color="purple", # Mean 
+             linetype="dashed") +
+  geom_vline(aes(xintercept=median(leeftijd)), color="black", # Median
+             linetype="dashed") +
+  labs(title="Age distribution Festival visitors",x="Age", y = "Count")+
+  theme_bw(base_size = 16) + 
+  scale_fill_manual(values=c("#00ccff", "#ff0000")) # colors
+```
+
+```{r fig.width=12}
+ggplot(bezoeker, aes(x=leeftijd)) + # plotting
+  geom_histogram(position="identity",binwidth=2, alpha=0.6) + 
+  scale_x_continuous(breaks=seq(18,60,2)) + # rearrange the axes
+  scale_y_continuous(breaks=seq(0,15,1)) + # rearrange the axes
+  labs(title="Age distribution Festival visitors by sex",x="Age", y = "Count")+
+  theme_bw(base_size = 16) + 
+  scale_fill_manual(values=c("#00ccff", "#ff0000")) + facet_wrap(~ geslacht) # separate visualization based on sex
+```
+
+### 3.9 What is the average age per gender of the festival visitors who attend Techno festivals in 2019?
+Below is the average age per gender of the festival visitors who went to Techno festivals in 2019. This query consists of 3 parts: The query, inline view as result set and a subquery. First of all, use cast to round the average age down because SQLite has no floor function. Then I use an inline view where I select all unique visitors who went to festivals in 2019. I also make a calculation to calculate the age. I also create a subquery that serves as a result set where visitors went to techno festivals. This, combined with the rest, provides an overview of the average age per gender of the festival visitors who go to techno festivals.
+```{sql connection=con}
+/* Cast is used for converting to int data type to round down eventually because SQLite has no floor function. I use an inline view as a result set in which I calculate someone's age with a formula. Finally, I use a subquery that indicates which visitors went to techno festivals.*/
+SELECT geslacht ,cast ( AVG(leeftijd) as int ) - ( AVG(leeftijd) < cast ( AVG(leeftijd) as int )) AS gemiddelde_leeftijd 
+FROM 
+(
+  SELECT DISTINCT b.bezoeker_id, voornaam, achternaam,
+  (strftime('%Y', 'now') - strftime('%Y', geboorte_datum)) - (strftime('%m-%d', 'now') < strftime('%m-%d', geboorte_datum)) AS leeftijd,   geslacht, strftime('%Y', datum) AS jaar
+  FROM bezoeker b
+  JOIN aanmeldingen a ON a.bezoeker_id = b.bezoeker_id
+  JOIN festival f ON f.festival_id = a.festival_id
+  WHERE jaar = '2019' AND b.bezoeker_id IN
+  (
+     SELECT b.bezoeker_id
+     FROM festival f
+     JOIN aanmeldingen a ON a.festival_id = f.festival_id
+     JOIN bezoeker b on b.bezoeker_id = a.bezoeker_id
+     JOIN festival_categorie_festival fcf ON fcf.festival_id = f.festival_id
+     JOIN festival_categorie fc ON fc.categorie_id = fcf.categorie_id
+     WHERE fc.naam =='Techno'
+  )
+)t
+GROUP BY geslacht
+```
+
+### 3.10 What is the average age of the festival visitors who went to Emporium in 2019?
+Below is the average age of the festival visitors who went to Emporium in 2019. From the festival table I join 4 other tables: aanmeldingen(registrations), bezoeker(visitor), festival_categorie_festival(between table) & festival_categorie(festival category). Then I filter on the festival name and year of the festival. Then I group by sex and minimize all rows because I want to know the average age based on sex
+```{r}
+festival %>%
+  inner_join(aanmeldingen, by='festival_id') %>%
+  inner_join(bezoeker, by='bezoeker_id') %>%
+  inner_join(festival_categorie_festival, by='festival_id') %>%
+  inner_join(festival_categorie, by='categorie_id') %>%
+  filter(naam.x == 'Emporium' & year(datum) =='2019') %>% # filtering
+  group_by(geslacht) %>% # group by sex
+  summarise(gemiddelde_leeftijd = mean(leeftijd.y)) # average age
+```
+
+### 3.11 What is the lowest, average and greatest revenue of the products from the sales table for each year?
+Below is an overview of the revenue from the sales table for each year. For each year I show the lowest, average and highest turnover that was achieved in that year. From the verkoop_producten (sales_products) table I join 2 other tables: the between table and festival. Then I create a new column for the revenue: the price times the number of pieces is the revenue. Then I group by the year of each date and I minimize the rows with the corresponding revenue for each year.
+```{r}
+verkoop_producten %>%
+  inner_join(verkoop_producten_festival, by='verkoop_id') %>% # join matching values
+  inner_join(festival, by='festival_id') %>% # join matching values
+  mutate(omzet = prijs * aantal)  %>% # add new column for sales
+  group_by(year(datum)) %>% # group by year
+  summarise(gemiddelde_omzet = round(mean(omzet),2), # minimize on average revenue
+            laagste_omzet = round(min(omzet),2), # minimize on lowest revenue
+            hoogste_omzet = round(max(omzet),2)) # minimize on highest revenue
+```
+
+### 3.12 How many pop festivals were organized per year?
+Below is a small overview where you can see how many pop festivals are held each year. First of all I select the festival table and join 4 other tables, 2 intermediate tables and the festival_category + location table. Then I group by each year and I filter by the music genre and finally I count this so that you can see how many pop festivals there are given each year.
+```{r}
+festival %>%
+  inner_join(festival_categorie_festival, by='festival_id') %>% # join matching values
+  inner_join(festival_categorie, by='categorie_id') %>% # join matching values
+  inner_join(locatie_festival, by='festival_id') %>% # join matching values
+  inner_join(locatie, by='locatie_id') %>% # join matching values
+  group_by(year(datum.x)) %>% # group by year
+  filter(genre=='Pop') %>% # filter on pop
+  count(genre) # count genres
+```
+
+
+
+
+
+
