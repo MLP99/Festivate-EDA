@@ -16,4 +16,9 @@ The goal of this school project was to create a fact sheet that contains essenti
 ![](./images/factsheet.png)
 
 ## Some findings:
+![](./images/vcpl.png)
+![](./images/spmdo.png)
 
+# Database design that was used in this project:
+**ONE IMPORTANT NOTE: the database tables are in Dutch.**
+![](./images/erd.png)
