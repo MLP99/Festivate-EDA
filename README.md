@@ -7,7 +7,7 @@ For this school project my group members and I started a fictional company calle
 * Used also R for the Exploratory Data Analysis (EDA) to modify en visualize data in order to extract insights
 
 
-Link to my R Markdown file:
+Link to my EDA:
 https://mlp99.github.io/Festivate-EDA/
 
 ## Goal:
