@@ -13,6 +13,10 @@ The goal of this school project was to create a fact sheet that contains essenti
 
 ![](./images/factsheet.png)
 
+## Conclusion
+During this project, I learned how to design a relational database model and how to query data to extract insights. In the database part of this project, I got to learn more about how to use common table expressions, how the different SQL joins work and how to use subqueries. While doing the Exploratory Data Analysis, I learned how to wrangle data with R and how to visualize data with the ggplot2 library to communicate my findings with other people.
+
+
 ## EDA Highlights:
 ![](./images/vcpl.png)
 ![](./images/spmdo.png)
